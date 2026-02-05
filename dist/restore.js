@@ -1,0 +1,110 @@
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", { value: true });
+const core = __importStar(require("@actions/core"));
+const utils_1 = require("./utils");
+const path = __importStar(require("path"));
+const os = __importStar(require("os"));
+async function run() {
+    try {
+        const workspace = (0, utils_1.getWorkspace)(core.getInput('workspace'));
+        const cacheTagPrefix = (0, utils_1.getCacheTagPrefix)(core.getInput('cache-tag'));
+        const inputVersion = core.getInput('node-version');
+        const workingDir = core.getInput('working-directory') || process.cwd();
+        const cacheNode = core.getInput('cache-node') !== 'false';
+        const cacheModules = core.getInput('cache-modules') !== 'false';
+        const cliVersion = core.getInput('cli-version') || 'v1.0.0';
+        const nodeVersion = await (0, utils_1.getNodeVersion)(inputVersion, workingDir);
+        const packageManager = await (0, utils_1.detectPackageManager)(workingDir);
+        core.info(`Detected package manager: ${packageManager}`);
+        // BoringCache is content-addressed, so simple tags work - no hash needed
+        const modulesTag = `${cacheTagPrefix}-modules`;
+        // Save state for post-job save
+        core.saveState('workspace', workspace);
+        core.saveState('cacheTagPrefix', cacheTagPrefix);
+        core.saveState('nodeVersion', nodeVersion);
+        core.saveState('workingDir', workingDir);
+        core.saveState('cacheNode', cacheNode.toString());
+        core.saveState('cacheModules', cacheModules.toString());
+        core.saveState('packageManager', packageManager);
+        core.saveState('modulesTag', modulesTag);
+        if (cliVersion.toLowerCase() !== 'skip') {
+            await (0, utils_1.ensureBoringCache)({ version: cliVersion });
+        }
+        const homedir = os.homedir();
+        const miseDataDir = `${homedir}/.local/share/mise`;
+        // Restore Node.js cache
+        // BoringCache is content-addressed, so simple tags work - no hash needed
+        if (cacheNode) {
+            const nodeTag = `${cacheTagPrefix}-node-${nodeVersion}`;
+            core.info(`Restoring Node.js ${nodeVersion}...`);
+            const nodeResult = await (0, utils_1.execBoringCache)(['restore', workspace, `${nodeTag}:${miseDataDir}`]);
+            if (nodeResult === 0) {
+                core.info('Node.js cache restored');
+                core.saveState('nodeRestored', 'true');
+                await (0, utils_1.activateNode)(nodeVersion);
+            }
+            else {
+                core.info('Node.js cache not found, will install');
+                await (0, utils_1.installMise)();
+                await (0, utils_1.installNode)(nodeVersion);
+            }
+        }
+        else {
+            await (0, utils_1.installMise)();
+            await (0, utils_1.installNode)(nodeVersion);
+        }
+        // Restore node_modules cache
+        if (cacheModules) {
+            const modulesDir = path.join(workingDir, 'node_modules');
+            core.info(`Restoring ${packageManager} modules...`);
+            const modulesResult = await (0, utils_1.execBoringCache)(['restore', workspace, `${modulesTag}:${modulesDir}`]);
+            if (modulesResult === 0) {
+                core.info('Modules cache restored');
+                core.saveState('modulesRestored', 'true');
+            }
+            else {
+                core.info('Modules cache not found');
+            }
+        }
+        core.info('Node.js setup complete');
+    }
+    catch (error) {
+        if (error instanceof Error) {
+            core.setFailed(error.message);
+        }
+    }
+}
+run();

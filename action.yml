@@ -1,0 +1,64 @@
+name: 'BoringCache Node.js'
+description: 'Cache once. Reuse everywhere. Setup Node.js via mise and cache Node.js + node_modules with BoringCache.'
+author: 'BoringCache'
+
+branding:
+  icon: 'package'
+  color: 'green'
+
+inputs:
+  cli-version:
+    description: 'BoringCache CLI version (e.g., v1.0.0). Set to "skip" to disable automatic CLI setup.'
+    required: false
+    default: 'v1.0.0'
+  workspace:
+    description: 'BoringCache workspace (e.g., "my-workspace" or "org/workspace")'
+    required: false
+  cache-tag:
+    description: 'Cache tag prefix for BoringCache. Defaults to repository name. Used as prefix for node/modules caches.'
+    required: false
+    default: ''
+  node-version:
+    description: 'Node.js version to install. Auto-detected from .node-version, .nvmrc, or .tool-versions if not specified.'
+    required: false
+  working-directory:
+    description: 'Working directory for the project'
+    required: false
+    default: '.'
+  cache-node:
+    description: 'Cache the Node.js installation'
+    required: false
+    default: 'true'
+  cache-modules:
+    description: 'Cache node_modules directory'
+    required: false
+    default: 'true'
+  exclude:
+    description: 'Glob pattern to exclude files from cache digest (e.g., "*.out")'
+    required: false
+  save-always:
+    description: 'Save cache even if the job fails'
+    required: false
+    default: 'false'
+
+outputs:
+  node-version:
+    description: 'Installed Node.js version'
+  cache-hit:
+    description: 'Whether the modules cache was restored'
+  node-cache-hit:
+    description: 'Whether the Node.js cache was restored'
+  cache-tag:
+    description: 'Cache tag prefix used'
+  node-tag:
+    description: 'Cache tag used for Node.js'
+  modules-tag:
+    description: 'Cache tag used for node_modules'
+  workspace:
+    description: 'Resolved workspace name'
+
+runs:
+  using: 'node24'
+  main: 'dist/restore/index.js'
+  post: 'dist/save/index.js'
+  post-if: "success() || inputs.save-always == 'true'"
