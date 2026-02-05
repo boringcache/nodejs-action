@@ -74,6 +74,8 @@ async function run() {
             if (nodeResult === 0) {
                 core.info('Node.js cache restored');
                 core.saveState('nodeRestored', 'true');
+                // Mise binary is not cached, only the data dir - need to install mise first
+                await (0, utils_1.installMise)();
                 await (0, utils_1.activateNode)(nodeVersion);
             }
             else {

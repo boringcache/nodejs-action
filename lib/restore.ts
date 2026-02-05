@@ -60,6 +60,8 @@ async function run(): Promise<void> {
       if (nodeResult === 0) {
         core.info('Node.js cache restored');
         core.saveState('nodeRestored', 'true');
+        // Mise binary is not cached, only the data dir - need to install mise first
+        await installMise();
         await activateNode(nodeVersion);
       } else {
         core.info('Node.js cache not found, will install');
