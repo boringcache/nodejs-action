@@ -45314,9 +45314,6 @@ async function run() {
         const workingDir = core.getState('workingDir') || process.cwd();
         const cacheNode = core.getState('cacheNode') === 'true';
         const cacheModules = core.getState('cacheModules') === 'true';
-        const packageManager = core.getState('packageManager') || 'npm';
-        const nodeRestored = core.getState('nodeRestored') === 'true';
-        const modulesRestored = core.getState('modulesRestored') === 'true';
         const modulesTag = core.getState('modulesTag');
         const exclude = core.getInput('exclude');
         if (!workspace) {
@@ -45325,27 +45322,24 @@ async function run() {
         }
         const homedir = os.homedir();
         const miseDataDir = `${homedir}/.local/share/mise`;
-        // Save Node.js cache if not restored from cache
-        if (cacheNode && !nodeRestored && nodeVersion && cacheTagPrefix) {
+        core.info('Saving to BoringCache...');
+        if (cacheNode && nodeVersion && cacheTagPrefix) {
             const nodeTag = `${cacheTagPrefix}-node-${nodeVersion}`;
-            core.info(`Saving Node.js ${nodeVersion}...`);
+            core.info(`Saving Node.js [${nodeTag}]...`);
             const args = ['save', workspace, `${nodeTag}:${miseDataDir}`];
             if (exclude) {
                 args.push('--exclude', exclude);
             }
             await (0, utils_1.execBoringCache)(args);
         }
-        // Save node_modules cache if not restored from cache
-        if (cacheModules && !modulesRestored && modulesTag) {
+        if (cacheModules && modulesTag) {
             const modulesDir = path.join(workingDir, 'node_modules');
-            if (await (0, utils_1.pathExists)(modulesDir)) {
-                core.info(`Saving ${packageManager} modules...`);
-                const args = ['save', workspace, `${modulesTag}:${modulesDir}`];
-                if (exclude) {
-                    args.push('--exclude', exclude);
-                }
-                await (0, utils_1.execBoringCache)(args);
+            core.info(`Saving modules [${modulesTag}]...`);
+            const args = ['save', workspace, `${modulesTag}:${modulesDir}`];
+            if (exclude) {
+                args.push('--exclude', exclude);
             }
+            await (0, utils_1.execBoringCache)(args);
         }
         core.info('Save complete');
     }
