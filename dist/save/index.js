@@ -45315,6 +45315,7 @@ async function run() {
         const cacheNode = core.getState('cacheNode') === 'true';
         const cacheModules = core.getState('cacheModules') === 'true';
         const modulesTag = core.getState('modulesTag');
+        const verbose = core.getState('verbose') === 'true';
         const exclude = core.getInput('exclude');
         if (!workspace) {
             core.info('No workspace state found, skipping save');
@@ -45327,18 +45328,20 @@ async function run() {
             const nodeTag = `${cacheTagPrefix}-node-${nodeVersion}`;
             core.info(`Saving Node.js [${nodeTag}]...`);
             const args = ['save', workspace, `${nodeTag}:${miseDataDir}`];
-            if (exclude) {
+            if (verbose)
+                args.push('--verbose');
+            if (exclude)
                 args.push('--exclude', exclude);
-            }
             await (0, utils_1.execBoringCache)(args);
         }
         if (cacheModules && modulesTag) {
             const modulesDir = path.join(workingDir, 'node_modules');
             core.info(`Saving modules [${modulesTag}]...`);
             const args = ['save', workspace, `${modulesTag}:${modulesDir}`];
-            if (exclude) {
+            if (verbose)
+                args.push('--verbose');
+            if (exclude)
                 args.push('--exclude', exclude);
-            }
             await (0, utils_1.execBoringCache)(args);
         }
         core.info('Save complete');

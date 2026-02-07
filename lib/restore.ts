@@ -22,6 +22,7 @@ async function run(): Promise<void> {
     const workingDir = core.getInput('working-directory') || process.cwd();
     const cacheNode = core.getInput('cache-node') !== 'false';
     const cacheModules = core.getInput('cache-modules') !== 'false';
+    const verbose = core.getInput('verbose') === 'true';
     const cliVersion = core.getInput('cli-version') || 'v1.0.0';
 
     const nodeVersion = await getNodeVersion(inputVersion, workingDir);
@@ -40,6 +41,7 @@ async function run(): Promise<void> {
     core.saveState('cacheModules', cacheModules.toString());
     core.saveState('packageManager', packageManager);
     core.saveState('modulesTag', modulesTag);
+    core.saveState('verbose', verbose.toString());
 
     if (cliVersion.toLowerCase() !== 'skip') {
       await ensureBoringCache({ version: cliVersion });
@@ -53,9 +55,9 @@ async function run(): Promise<void> {
     if (cacheNode) {
       const nodeTag = `${cacheTagPrefix}-node-${nodeVersion}`;
       core.info(`Restoring Node.js ${nodeVersion}...`);
-      const nodeResult = await execBoringCache(
-        ['restore', workspace, `${nodeTag}:${miseDataDir}`]
-      );
+      const nodeArgs = ['restore', workspace, `${nodeTag}:${miseDataDir}`];
+      if (verbose) nodeArgs.push('--verbose');
+      const nodeResult = await execBoringCache(nodeArgs);
 
       if (nodeResult === 0) {
         core.info('Node.js cache restored');
@@ -78,9 +80,9 @@ async function run(): Promise<void> {
       const modulesDir = path.join(workingDir, 'node_modules');
 
       core.info(`Restoring ${packageManager} modules...`);
-      const modulesResult = await execBoringCache(
-        ['restore', workspace, `${modulesTag}:${modulesDir}`]
-      );
+      const modulesArgs = ['restore', workspace, `${modulesTag}:${modulesDir}`];
+      if (verbose) modulesArgs.push('--verbose');
+      const modulesResult = await execBoringCache(modulesArgs);
 
       if (modulesResult === 0) {
         core.info('Modules cache restored');
