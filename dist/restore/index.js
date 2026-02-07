@@ -45314,6 +45314,7 @@ async function run() {
         const workingDir = core.getInput('working-directory') || process.cwd();
         const cacheNode = core.getInput('cache-node') !== 'false';
         const cacheModules = core.getInput('cache-modules') !== 'false';
+        const verbose = core.getInput('verbose') === 'true';
         const cliVersion = core.getInput('cli-version') || 'v1.0.0';
         const nodeVersion = await (0, utils_1.getNodeVersion)(inputVersion, workingDir);
         const packageManager = await (0, utils_1.detectPackageManager)(workingDir);
@@ -45329,6 +45330,7 @@ async function run() {
         core.saveState('cacheModules', cacheModules.toString());
         core.saveState('packageManager', packageManager);
         core.saveState('modulesTag', modulesTag);
+        core.saveState('verbose', verbose.toString());
         if (cliVersion.toLowerCase() !== 'skip') {
             await (0, utils_1.ensureBoringCache)({ version: cliVersion });
         }
@@ -45339,7 +45341,10 @@ async function run() {
         if (cacheNode) {
             const nodeTag = `${cacheTagPrefix}-node-${nodeVersion}`;
             core.info(`Restoring Node.js ${nodeVersion}...`);
-            const nodeResult = await (0, utils_1.execBoringCache)(['restore', workspace, `${nodeTag}:${miseDataDir}`]);
+            const nodeArgs = ['restore', workspace, `${nodeTag}:${miseDataDir}`];
+            if (verbose)
+                nodeArgs.push('--verbose');
+            const nodeResult = await (0, utils_1.execBoringCache)(nodeArgs);
             if (nodeResult === 0) {
                 core.info('Node.js cache restored');
                 core.saveState('nodeRestored', 'true');
@@ -45361,7 +45366,10 @@ async function run() {
         if (cacheModules) {
             const modulesDir = path.join(workingDir, 'node_modules');
             core.info(`Restoring ${packageManager} modules...`);
-            const modulesResult = await (0, utils_1.execBoringCache)(['restore', workspace, `${modulesTag}:${modulesDir}`]);
+            const modulesArgs = ['restore', workspace, `${modulesTag}:${modulesDir}`];
+            if (verbose)
+                modulesArgs.push('--verbose');
+            const modulesResult = await (0, utils_1.execBoringCache)(modulesArgs);
             if (modulesResult === 0) {
                 core.info('Modules cache restored');
                 core.saveState('modulesRestored', 'true');

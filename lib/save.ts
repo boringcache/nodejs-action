@@ -12,6 +12,7 @@ async function run(): Promise<void> {
     const cacheNode = core.getState('cacheNode') === 'true';
     const cacheModules = core.getState('cacheModules') === 'true';
     const modulesTag = core.getState('modulesTag');
+    const verbose = core.getState('verbose') === 'true';
     const exclude = core.getInput('exclude');
 
     if (!workspace) {
@@ -29,9 +30,8 @@ async function run(): Promise<void> {
       core.info(`Saving Node.js [${nodeTag}]...`);
 
       const args = ['save', workspace, `${nodeTag}:${miseDataDir}`];
-      if (exclude) {
-        args.push('--exclude', exclude);
-      }
+      if (verbose) args.push('--verbose');
+      if (exclude) args.push('--exclude', exclude);
 
       await execBoringCache(args);
     }
@@ -41,9 +41,8 @@ async function run(): Promise<void> {
       core.info(`Saving modules [${modulesTag}]...`);
 
       const args = ['save', workspace, `${modulesTag}:${modulesDir}`];
-      if (exclude) {
-        args.push('--exclude', exclude);
-      }
+      if (verbose) args.push('--verbose');
+      if (exclude) args.push('--exclude', exclude);
 
       await execBoringCache(args);
     }
