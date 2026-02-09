@@ -45378,6 +45378,28 @@ async function run() {
                 core.info('Modules cache not found');
             }
         }
+        // Restore build system caches
+        const cacheBuild = core.getInput('cache-build') !== 'false';
+        if (cacheBuild) {
+            const autoDetected = await (0, utils_1.detectBuildCaches)(workingDir);
+            const userOverrides = (0, utils_1.parseBuildCachePaths)(core.getInput('build-cache-paths'), workingDir);
+            const buildCaches = (0, utils_1.mergeBuildCaches)(autoDetected, userOverrides);
+            if (buildCaches.length > 0) {
+                core.info(`Detected build caches: ${buildCaches.map(e => e.name).join(', ')}`);
+                const buildCacheTags = [];
+                for (const entry of buildCaches) {
+                    const tag = `${cacheTagPrefix}-${entry.name}`;
+                    buildCacheTags.push({ name: entry.name, tag, path: entry.path });
+                    core.info(`Restoring ${entry.name} build cache...`);
+                    const args = ['restore', workspace, `${tag}:${entry.path}`];
+                    if (verbose)
+                        args.push('--verbose');
+                    await (0, utils_1.execBoringCache)(args);
+                }
+                core.saveState('buildCaches', JSON.stringify(buildCacheTags));
+            }
+            core.saveState('cacheBuild', cacheBuild.toString());
+        }
         core.info('Node.js setup complete');
     }
     catch (error) {
@@ -45440,6 +45462,9 @@ exports.installMise = installMise;
 exports.installNode = installNode;
 exports.activateNode = activateNode;
 exports.pathExists = pathExists;
+exports.detectBuildCaches = detectBuildCaches;
+exports.parseBuildCachePaths = parseBuildCachePaths;
+exports.mergeBuildCaches = mergeBuildCaches;
 const core = __importStar(__nccwpck_require__(37484));
 const exec = __importStar(__nccwpck_require__(95236));
 const fs = __importStar(__nccwpck_require__(79896));
@@ -45547,6 +45572,97 @@ async function pathExists(p) {
     catch {
         return false;
     }
+}
+async function detectBuildCaches(workingDir) {
+    var _a, _b, _c;
+    const entries = [];
+    // Turbo
+    const turboJsonPath = path.join(workingDir, 'turbo.json');
+    if (await pathExists(turboJsonPath)) {
+        let cacheDir = '.turbo/cache';
+        try {
+            const content = await fs.promises.readFile(turboJsonPath, 'utf-8');
+            const config = JSON.parse(content);
+            if (config.cacheDir && typeof config.cacheDir === 'string') {
+                cacheDir = config.cacheDir;
+            }
+        }
+        catch {
+            core.warning('Failed to parse turbo.json, using default cache path');
+        }
+        entries.push({
+            name: 'turbo',
+            path: path.isAbsolute(cacheDir) ? cacheDir : path.resolve(workingDir, cacheDir),
+        });
+    }
+    // Nx
+    const nxJsonPath = path.join(workingDir, 'nx.json');
+    if (await pathExists(nxJsonPath)) {
+        let cacheDir = '.nx/cache';
+        try {
+            const content = await fs.promises.readFile(nxJsonPath, 'utf-8');
+            const config = JSON.parse(content);
+            if (config.cacheDirectory && typeof config.cacheDirectory === 'string') {
+                cacheDir = config.cacheDirectory;
+            }
+            else if (((_c = (_b = (_a = config.tasksRunnerOptions) === null || _a === void 0 ? void 0 : _a.default) === null || _b === void 0 ? void 0 : _b.options) === null || _c === void 0 ? void 0 : _c.cacheDirectory) &&
+                typeof config.tasksRunnerOptions.default.options.cacheDirectory === 'string') {
+                cacheDir = config.tasksRunnerOptions.default.options.cacheDirectory;
+            }
+        }
+        catch {
+            core.warning('Failed to parse nx.json, using default cache path');
+        }
+        entries.push({
+            name: 'nx',
+            path: path.isAbsolute(cacheDir) ? cacheDir : path.resolve(workingDir, cacheDir),
+        });
+    }
+    // Next.js
+    const nextConfigs = ['next.config.js', 'next.config.mjs', 'next.config.ts'];
+    for (const configFile of nextConfigs) {
+        if (await pathExists(path.join(workingDir, configFile))) {
+            entries.push({
+                name: 'nextjs',
+                path: path.resolve(workingDir, '.next/cache'),
+            });
+            break;
+        }
+    }
+    return entries;
+}
+function parseBuildCachePaths(input, workingDir) {
+    if (!input.trim())
+        return [];
+    const entries = [];
+    const lines = input.split('\n');
+    for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed)
+            continue;
+        const colonIdx = trimmed.indexOf(':');
+        if (colonIdx === -1)
+            continue;
+        const name = trimmed.slice(0, colonIdx).trim();
+        const rawPath = trimmed.slice(colonIdx + 1).trim();
+        if (!name || !rawPath)
+            continue;
+        entries.push({
+            name,
+            path: path.isAbsolute(rawPath) ? rawPath : path.resolve(workingDir, rawPath),
+        });
+    }
+    return entries;
+}
+function mergeBuildCaches(autoDetected, userOverrides) {
+    const map = new Map();
+    for (const entry of autoDetected) {
+        map.set(entry.name, entry);
+    }
+    for (const entry of userOverrides) {
+        map.set(entry.name, entry);
+    }
+    return Array.from(map.values());
 }
 
 

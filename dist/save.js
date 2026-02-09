@@ -75,6 +75,23 @@ async function run() {
                 args.push('--exclude', exclude);
             await (0, utils_1.execBoringCache)(args);
         }
+        // Save build system caches
+        const cacheBuild = core.getState('cacheBuild') === 'true';
+        if (cacheBuild) {
+            const buildCachesJson = core.getState('buildCaches');
+            if (buildCachesJson) {
+                const buildCaches = JSON.parse(buildCachesJson);
+                for (const entry of buildCaches) {
+                    core.info(`Saving ${entry.name} build cache [${entry.tag}]...`);
+                    const args = ['save', workspace, `${entry.tag}:${entry.path}`];
+                    if (verbose)
+                        args.push('--verbose');
+                    if (exclude)
+                        args.push('--exclude', exclude);
+                    await (0, utils_1.execBoringCache)(args);
+                }
+            }
+        }
         core.info('Save complete');
     }
     catch (error) {

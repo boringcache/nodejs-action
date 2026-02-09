@@ -109,6 +109,28 @@ async function run() {
                 core.info('Modules cache not found');
             }
         }
+        // Restore build system caches
+        const cacheBuild = core.getInput('cache-build') !== 'false';
+        if (cacheBuild) {
+            const autoDetected = await (0, utils_1.detectBuildCaches)(workingDir);
+            const userOverrides = (0, utils_1.parseBuildCachePaths)(core.getInput('build-cache-paths'), workingDir);
+            const buildCaches = (0, utils_1.mergeBuildCaches)(autoDetected, userOverrides);
+            if (buildCaches.length > 0) {
+                core.info(`Detected build caches: ${buildCaches.map(e => e.name).join(', ')}`);
+                const buildCacheTags = [];
+                for (const entry of buildCaches) {
+                    const tag = `${cacheTagPrefix}-${entry.name}`;
+                    buildCacheTags.push({ name: entry.name, tag, path: entry.path });
+                    core.info(`Restoring ${entry.name} build cache...`);
+                    const args = ['restore', workspace, `${tag}:${entry.path}`];
+                    if (verbose)
+                        args.push('--verbose');
+                    await (0, utils_1.execBoringCache)(args);
+                }
+                core.saveState('buildCaches', JSON.stringify(buildCacheTags));
+            }
+            core.saveState('cacheBuild', cacheBuild.toString());
+        }
         core.info('Node.js setup complete');
     }
     catch (error) {

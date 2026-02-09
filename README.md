@@ -29,9 +29,8 @@ This action caches the Node.js directories you explicitly choose.
 
 - Node.js is installed via mise.
 - `node_modules` is restored if a matching cache exists.
+- Build system caches (Turborepo, Nx, Next.js) are auto-detected and restored.
 - Updated caches are saved after the job completes.
-
-This action does not infer what should be cached and does not modify your build commands.
 
 Version detection order:
 - `.node-version`
@@ -48,6 +47,7 @@ Package manager detection:
 Cache tags:
 - Node.js: `{cache-tag}-node-{version}`
 - Modules: `{cache-tag}-modules`
+- Build caches: `{cache-tag}-{name}` (e.g., `{cache-tag}-turbo`)
 
 ## Common patterns
 
@@ -96,6 +96,49 @@ Cache tags:
 - run: pnpm test
 ```
 
+### Build cache (auto-detected)
+
+If your project uses Turborepo, Nx, or Next.js, their build caches are automatically detected and cached. No configuration needed.
+
+```yaml
+- uses: boringcache/nodejs-action@v1
+  with:
+    workspace: my-org/my-project
+  env:
+    BORINGCACHE_API_TOKEN: ${{ secrets.BORINGCACHE_API_TOKEN }}
+
+- run: npm install
+- run: npx turbo build  # .turbo/cache is auto-detected
+```
+
+Detection reads `turbo.json`, `nx.json`, and `next.config.{js,mjs,ts}`. Custom cache directories configured in those files are respected.
+
+### Build cache with custom paths
+
+Override or add build cache paths manually:
+
+```yaml
+- uses: boringcache/nodejs-action@v1
+  with:
+    workspace: my-org/my-project
+    build-cache-paths: |
+      turbo:./custom/turbo-cache
+      storybook:.storybook/cache
+  env:
+    BORINGCACHE_API_TOKEN: ${{ secrets.BORINGCACHE_API_TOKEN }}
+```
+
+### Disable build cache
+
+```yaml
+- uses: boringcache/nodejs-action@v1
+  with:
+    workspace: my-org/my-project
+    cache-build: 'false'
+  env:
+    BORINGCACHE_API_TOKEN: ${{ secrets.BORINGCACHE_API_TOKEN }}
+```
+
 ## Inputs
 
 | Input | Required | Default | Description |
@@ -107,6 +150,8 @@ Cache tags:
 | `working-directory` | No | `.` | Project working directory. |
 | `cache-node` | No | `true` | Cache Node.js installation. |
 | `cache-modules` | No | `true` | Cache `node_modules`. |
+| `cache-build` | No | `true` | Auto-detect and cache build system outputs (Turborepo, Nx, Next.js). |
+| `build-cache-paths` | No | `''` | Manual build cache paths in `name:path` format (newline-separated). |
 | `exclude` | No | - | Glob pattern to exclude from cache digest (e.g., `*.out`). |
 | `save-always` | No | `false` | Save cache even if job fails. |
 
@@ -114,7 +159,6 @@ Cache tags:
 
 | Output | Description |
 |--------|-------------|
-| None | This action does not set outputs. |
 
 ## Platform behavior
 

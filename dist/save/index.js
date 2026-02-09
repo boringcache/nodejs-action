@@ -45344,6 +45344,23 @@ async function run() {
                 args.push('--exclude', exclude);
             await (0, utils_1.execBoringCache)(args);
         }
+        // Save build system caches
+        const cacheBuild = core.getState('cacheBuild') === 'true';
+        if (cacheBuild) {
+            const buildCachesJson = core.getState('buildCaches');
+            if (buildCachesJson) {
+                const buildCaches = JSON.parse(buildCachesJson);
+                for (const entry of buildCaches) {
+                    core.info(`Saving ${entry.name} build cache [${entry.tag}]...`);
+                    const args = ['save', workspace, `${entry.tag}:${entry.path}`];
+                    if (verbose)
+                        args.push('--verbose');
+                    if (exclude)
+                        args.push('--exclude', exclude);
+                    await (0, utils_1.execBoringCache)(args);
+                }
+            }
+        }
         core.info('Save complete');
     }
     catch (error) {
@@ -45406,6 +45423,9 @@ exports.installMise = installMise;
 exports.installNode = installNode;
 exports.activateNode = activateNode;
 exports.pathExists = pathExists;
+exports.detectBuildCaches = detectBuildCaches;
+exports.parseBuildCachePaths = parseBuildCachePaths;
+exports.mergeBuildCaches = mergeBuildCaches;
 const core = __importStar(__nccwpck_require__(37484));
 const exec = __importStar(__nccwpck_require__(95236));
 const fs = __importStar(__nccwpck_require__(79896));
@@ -45513,6 +45533,97 @@ async function pathExists(p) {
     catch {
         return false;
     }
+}
+async function detectBuildCaches(workingDir) {
+    var _a, _b, _c;
+    const entries = [];
+    // Turbo
+    const turboJsonPath = path.join(workingDir, 'turbo.json');
+    if (await pathExists(turboJsonPath)) {
+        let cacheDir = '.turbo/cache';
+        try {
+            const content = await fs.promises.readFile(turboJsonPath, 'utf-8');
+            const config = JSON.parse(content);
+            if (config.cacheDir && typeof config.cacheDir === 'string') {
+                cacheDir = config.cacheDir;
+            }
+        }
+        catch {
+            core.warning('Failed to parse turbo.json, using default cache path');
+        }
+        entries.push({
+            name: 'turbo',
+            path: path.isAbsolute(cacheDir) ? cacheDir : path.resolve(workingDir, cacheDir),
+        });
+    }
+    // Nx
+    const nxJsonPath = path.join(workingDir, 'nx.json');
+    if (await pathExists(nxJsonPath)) {
+        let cacheDir = '.nx/cache';
+        try {
+            const content = await fs.promises.readFile(nxJsonPath, 'utf-8');
+            const config = JSON.parse(content);
+            if (config.cacheDirectory && typeof config.cacheDirectory === 'string') {
+                cacheDir = config.cacheDirectory;
+            }
+            else if (((_c = (_b = (_a = config.tasksRunnerOptions) === null || _a === void 0 ? void 0 : _a.default) === null || _b === void 0 ? void 0 : _b.options) === null || _c === void 0 ? void 0 : _c.cacheDirectory) &&
+                typeof config.tasksRunnerOptions.default.options.cacheDirectory === 'string') {
+                cacheDir = config.tasksRunnerOptions.default.options.cacheDirectory;
+            }
+        }
+        catch {
+            core.warning('Failed to parse nx.json, using default cache path');
+        }
+        entries.push({
+            name: 'nx',
+            path: path.isAbsolute(cacheDir) ? cacheDir : path.resolve(workingDir, cacheDir),
+        });
+    }
+    // Next.js
+    const nextConfigs = ['next.config.js', 'next.config.mjs', 'next.config.ts'];
+    for (const configFile of nextConfigs) {
+        if (await pathExists(path.join(workingDir, configFile))) {
+            entries.push({
+                name: 'nextjs',
+                path: path.resolve(workingDir, '.next/cache'),
+            });
+            break;
+        }
+    }
+    return entries;
+}
+function parseBuildCachePaths(input, workingDir) {
+    if (!input.trim())
+        return [];
+    const entries = [];
+    const lines = input.split('\n');
+    for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed)
+            continue;
+        const colonIdx = trimmed.indexOf(':');
+        if (colonIdx === -1)
+            continue;
+        const name = trimmed.slice(0, colonIdx).trim();
+        const rawPath = trimmed.slice(colonIdx + 1).trim();
+        if (!name || !rawPath)
+            continue;
+        entries.push({
+            name,
+            path: path.isAbsolute(rawPath) ? rawPath : path.resolve(workingDir, rawPath),
+        });
+    }
+    return entries;
+}
+function mergeBuildCaches(autoDetected, userOverrides) {
+    const map = new Map();
+    for (const entry of autoDetected) {
+        map.set(entry.name, entry);
+    }
+    for (const entry of userOverrides) {
+        map.set(entry.name, entry);
+    }
+    return Array.from(map.values());
 }
 
 

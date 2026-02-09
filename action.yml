@@ -40,6 +40,14 @@ inputs:
   exclude:
     description: 'Glob pattern to exclude files from cache digest (e.g., "*.out")'
     required: false
+  cache-build:
+    description: 'Auto-detect and cache build system outputs (Turborepo, Nx, Next.js)'
+    required: false
+    default: 'true'
+  build-cache-paths:
+    description: 'Manual build cache paths in name:path format (newline-separated). Overrides auto-detected paths by name.'
+    required: false
+    default: ''
   save-always:
     description: 'Save cache even if the job fails'
     required: false
