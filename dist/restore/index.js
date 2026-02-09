@@ -45305,7 +45305,6 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 const core = __importStar(__nccwpck_require__(37484));
 const utils_1 = __nccwpck_require__(2219);
 const path = __importStar(__nccwpck_require__(16928));
-const os = __importStar(__nccwpck_require__(70857));
 async function run() {
     try {
         const workspace = (0, utils_1.getWorkspace)(core.getInput('workspace'));
@@ -45334,8 +45333,7 @@ async function run() {
         if (cliVersion.toLowerCase() !== 'skip') {
             await (0, utils_1.ensureBoringCache)({ version: cliVersion });
         }
-        const homedir = os.homedir();
-        const miseDataDir = `${homedir}/.local/share/mise`;
+        const miseDataDir = (0, utils_1.getMiseDataDir)();
         // Restore Node.js cache
         // BoringCache is content-addressed, so simple tags work - no hash needed
         if (cacheNode) {
@@ -45453,6 +45451,8 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.execBoringCache = exports.ensureBoringCache = void 0;
+exports.getMiseBinPath = getMiseBinPath;
+exports.getMiseDataDir = getMiseDataDir;
 exports.getWorkspace = getWorkspace;
 exports.getCacheTagPrefix = getCacheTagPrefix;
 exports.getNodeVersion = getNodeVersion;
@@ -45473,6 +45473,19 @@ const os = __importStar(__nccwpck_require__(70857));
 const action_core_1 = __nccwpck_require__(68701);
 Object.defineProperty(exports, "ensureBoringCache", ({ enumerable: true, get: function () { return action_core_1.ensureBoringCache; } }));
 Object.defineProperty(exports, "execBoringCache", ({ enumerable: true, get: function () { return action_core_1.execBoringCache; } }));
+const isWindows = process.platform === 'win32';
+function getMiseBinPath() {
+    const homedir = os.homedir();
+    return isWindows
+        ? path.join(homedir, '.local', 'bin', 'mise.exe')
+        : path.join(homedir, '.local', 'bin', 'mise');
+}
+function getMiseDataDir() {
+    if (isWindows) {
+        return path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'mise');
+    }
+    return path.join(os.homedir(), '.local', 'share', 'mise');
+}
 function getWorkspace(inputWorkspace) {
     let workspace = inputWorkspace || process.env.BORINGCACHE_DEFAULT_WORKSPACE || '';
     if (!workspace) {
@@ -45546,22 +45559,25 @@ async function detectPackageManager(workingDir) {
 }
 async function installMise() {
     core.info('Installing mise...');
-    await exec.exec('sh', ['-c', 'curl https://mise.run | sh']);
+    if (isWindows) {
+        await exec.exec('powershell', ['-c', 'irm https://mise.jdx.dev/install.ps1 | iex']);
+    }
+    else {
+        await exec.exec('sh', ['-c', 'curl https://mise.run | sh']);
+    }
     const homedir = os.homedir();
-    core.addPath(`${homedir}/.local/bin`);
-    core.addPath(`${homedir}/.local/share/mise/shims`);
+    core.addPath(path.join(homedir, '.local', 'bin'));
+    core.addPath(path.join(getMiseDataDir(), 'shims'));
 }
 async function installNode(version) {
     core.info(`Installing Node.js ${version} via mise...`);
-    const homedir = os.homedir();
-    const misePath = `${homedir}/.local/bin/mise`;
+    const misePath = getMiseBinPath();
     await exec.exec(misePath, ['install', `node@${version}`]);
     await exec.exec(misePath, ['use', '-g', `node@${version}`]);
 }
 async function activateNode(version) {
     core.info(`Activating Node.js ${version}...`);
-    const homedir = os.homedir();
-    const misePath = `${homedir}/.local/bin/mise`;
+    const misePath = getMiseBinPath();
     await exec.exec(misePath, ['use', '-g', `node@${version}`]);
 }
 async function pathExists(p) {

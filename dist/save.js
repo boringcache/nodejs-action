@@ -36,7 +36,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const core = __importStar(require("@actions/core"));
 const utils_1 = require("./utils");
 const path = __importStar(require("path"));
-const os = __importStar(require("os"));
 async function run() {
     try {
         const workspace = core.getState('workspace');
@@ -52,8 +51,7 @@ async function run() {
             core.info('No workspace state found, skipping save');
             return;
         }
-        const homedir = os.homedir();
-        const miseDataDir = `${homedir}/.local/share/mise`;
+        const miseDataDir = (0, utils_1.getMiseDataDir)();
         core.info('Saving to BoringCache...');
         if (cacheNode && nodeVersion && cacheTagPrefix) {
             const nodeTag = `${cacheTagPrefix}-node-${nodeVersion}`;

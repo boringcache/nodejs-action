@@ -7,6 +7,22 @@ import { ensureBoringCache, execBoringCache } from '@boringcache/action-core';
 
 export { ensureBoringCache, execBoringCache };
 
+const isWindows = process.platform === 'win32';
+
+export function getMiseBinPath(): string {
+  const homedir = os.homedir();
+  return isWindows
+    ? path.join(homedir, '.local', 'bin', 'mise.exe')
+    : path.join(homedir, '.local', 'bin', 'mise');
+}
+
+export function getMiseDataDir(): string {
+  if (isWindows) {
+    return path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'mise');
+  }
+  return path.join(os.homedir(), '.local', 'share', 'mise');
+}
+
 export function getWorkspace(inputWorkspace: string): string {
   let workspace = inputWorkspace || process.env.BORINGCACHE_DEFAULT_WORKSPACE || '';
 
@@ -90,17 +106,20 @@ export async function detectPackageManager(workingDir: string): Promise<'npm' | 
 
 export async function installMise(): Promise<void> {
   core.info('Installing mise...');
-  await exec.exec('sh', ['-c', 'curl https://mise.run | sh']);
+  if (isWindows) {
+    await exec.exec('powershell', ['-c', 'irm https://mise.jdx.dev/install.ps1 | iex']);
+  } else {
+    await exec.exec('sh', ['-c', 'curl https://mise.run | sh']);
+  }
 
   const homedir = os.homedir();
-  core.addPath(`${homedir}/.local/bin`);
-  core.addPath(`${homedir}/.local/share/mise/shims`);
+  core.addPath(path.join(homedir, '.local', 'bin'));
+  core.addPath(path.join(getMiseDataDir(), 'shims'));
 }
 
 export async function installNode(version: string): Promise<void> {
   core.info(`Installing Node.js ${version} via mise...`);
-  const homedir = os.homedir();
-  const misePath = `${homedir}/.local/bin/mise`;
+  const misePath = getMiseBinPath();
 
   await exec.exec(misePath, ['install', `node@${version}`]);
   await exec.exec(misePath, ['use', '-g', `node@${version}`]);
@@ -108,8 +127,7 @@ export async function installNode(version: string): Promise<void> {
 
 export async function activateNode(version: string): Promise<void> {
   core.info(`Activating Node.js ${version}...`);
-  const homedir = os.homedir();
-  const misePath = `${homedir}/.local/bin/mise`;
+  const misePath = getMiseBinPath();
 
   await exec.exec(misePath, ['use', '-g', `node@${version}`]);
 }

@@ -13,9 +13,9 @@ import {
   detectBuildCaches,
   parseBuildCachePaths,
   mergeBuildCaches,
+  getMiseDataDir,
 } from './utils';
 import * as path from 'path';
-import * as os from 'os';
 
 async function run(): Promise<void> {
   try {
@@ -50,8 +50,7 @@ async function run(): Promise<void> {
       await ensureBoringCache({ version: cliVersion });
     }
 
-    const homedir = os.homedir();
-    const miseDataDir = `${homedir}/.local/share/mise`;
+    const miseDataDir = getMiseDataDir();
 
     // Restore Node.js cache
     // BoringCache is content-addressed, so simple tags work - no hash needed

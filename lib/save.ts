@@ -1,7 +1,6 @@
 import * as core from '@actions/core';
-import { execBoringCache } from './utils';
+import { execBoringCache, getMiseDataDir } from './utils';
 import * as path from 'path';
-import * as os from 'os';
 
 async function run(): Promise<void> {
   try {
@@ -20,8 +19,7 @@ async function run(): Promise<void> {
       return;
     }
 
-    const homedir = os.homedir();
-    const miseDataDir = `${homedir}/.local/share/mise`;
+    const miseDataDir = getMiseDataDir();
 
     core.info('Saving to BoringCache...');
 

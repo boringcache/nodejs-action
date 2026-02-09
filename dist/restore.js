@@ -36,7 +36,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const core = __importStar(require("@actions/core"));
 const utils_1 = require("./utils");
 const path = __importStar(require("path"));
-const os = __importStar(require("os"));
 async function run() {
     try {
         const workspace = (0, utils_1.getWorkspace)(core.getInput('workspace'));
@@ -65,8 +64,7 @@ async function run() {
         if (cliVersion.toLowerCase() !== 'skip') {
             await (0, utils_1.ensureBoringCache)({ version: cliVersion });
         }
-        const homedir = os.homedir();
-        const miseDataDir = `${homedir}/.local/share/mise`;
+        const miseDataDir = (0, utils_1.getMiseDataDir)();
         // Restore Node.js cache
         // BoringCache is content-addressed, so simple tags work - no hash needed
         if (cacheNode) {
