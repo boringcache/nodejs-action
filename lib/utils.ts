@@ -107,14 +107,35 @@ export async function detectPackageManager(workingDir: string): Promise<'npm' | 
 export async function installMise(): Promise<void> {
   core.info('Installing mise...');
   if (isWindows) {
-    await exec.exec('powershell', ['-c', 'irm https://mise.jdx.dev/install.ps1 | iex']);
+    await installMiseWindows();
   } else {
     await exec.exec('sh', ['-c', 'curl https://mise.run | sh']);
   }
 
-  const homedir = os.homedir();
-  core.addPath(path.join(homedir, '.local', 'bin'));
+  core.addPath(path.dirname(getMiseBinPath()));
   core.addPath(path.join(getMiseDataDir(), 'shims'));
+}
+
+async function installMiseWindows(): Promise<void> {
+  const arch = os.arch() === 'arm64' ? 'arm64' : 'x64';
+  const miseVersion = process.env.MISE_VERSION || 'v2026.2.8';
+  const url = `https://github.com/jdx/mise/releases/download/${miseVersion}/mise-${miseVersion}-windows-${arch}.zip`;
+
+  const binDir = path.dirname(getMiseBinPath());
+  await fs.promises.mkdir(binDir, { recursive: true });
+
+  const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'mise-'));
+  try {
+    const zipPath = path.join(tempDir, 'mise.zip');
+    await exec.exec('curl', ['-fsSL', '-o', zipPath, url]);
+    await exec.exec('tar', ['-xf', zipPath, '-C', tempDir]);
+    await fs.promises.copyFile(
+      path.join(tempDir, 'mise', 'bin', 'mise.exe'),
+      getMiseBinPath(),
+    );
+  } finally {
+    await fs.promises.rm(tempDir, { recursive: true, force: true });
+  }
 }
 
 export async function installNode(version: string): Promise<void> {
