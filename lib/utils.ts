@@ -213,6 +213,36 @@ export async function detectBuildCaches(workingDir: string): Promise<BuildCacheE
     });
   }
 
+  // Yarn Berry
+  const yarnrcPath = path.join(workingDir, '.yarnrc.yml');
+  const yarnLockPath = path.join(workingDir, 'yarn.lock');
+  if (await pathExists(yarnrcPath) && await pathExists(yarnLockPath)) {
+    let cacheFolder = '.yarn/cache';
+    let enableGlobalCache = true;
+    try {
+      const content = await fs.promises.readFile(yarnrcPath, 'utf-8');
+      for (const line of content.split('\n')) {
+        const cacheFolderMatch = line.match(/^cacheFolder:\s*['"]?(.+?)['"]?\s*$/);
+        if (cacheFolderMatch) {
+          cacheFolder = cacheFolderMatch[1];
+        }
+        const globalCacheMatch = line.match(/^enableGlobalCache:\s*(true|false)\s*$/);
+        if (globalCacheMatch) {
+          enableGlobalCache = globalCacheMatch[1] === 'true';
+        }
+      }
+    } catch {
+      core.warning('Failed to parse .yarnrc.yml, skipping yarn cache detection');
+    }
+
+    if (!enableGlobalCache) {
+      entries.push({
+        name: 'yarn-cache',
+        path: path.isAbsolute(cacheFolder) ? cacheFolder : path.resolve(workingDir, cacheFolder),
+      });
+    }
+  }
+
   // Next.js
   const nextConfigs = ['next.config.js', 'next.config.mjs', 'next.config.ts'];
   for (const configFile of nextConfigs) {

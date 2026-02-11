@@ -41,7 +41,7 @@ inputs:
     description: 'Glob pattern to exclude files from cache digest (e.g., "*.out")'
     required: false
   cache-build:
-    description: 'Auto-detect and cache build system outputs (Turborepo, Nx, Next.js)'
+    description: 'Auto-detect and cache build system outputs (Turborepo, Nx, Next.js, Yarn Berry)'
     required: false
     default: 'true'
   build-cache-paths:

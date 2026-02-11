@@ -114,6 +114,71 @@ describe('detectBuildCaches', () => {
     expect(result.map(e => e.name)).toEqual(['turbo', 'nx', 'nextjs']);
   });
 
+  it('should detect yarn berry cache with enableGlobalCache: false', async () => {
+    await fs.promises.writeFile(path.join(tmpDir, 'yarn.lock'), '');
+    await fs.promises.writeFile(
+      path.join(tmpDir, '.yarnrc.yml'),
+      'enableGlobalCache: false\nnodeLinker: node-modules\n',
+    );
+    const result = await detectBuildCaches(tmpDir);
+    expect(result).toEqual([
+      { name: 'yarn-cache', path: path.resolve(tmpDir, '.yarn/cache') },
+    ]);
+  });
+
+  it('should detect yarn berry cache with custom cacheFolder', async () => {
+    await fs.promises.writeFile(path.join(tmpDir, 'yarn.lock'), '');
+    await fs.promises.writeFile(
+      path.join(tmpDir, '.yarnrc.yml'),
+      'enableGlobalCache: false\ncacheFolder: ".custom-yarn-cache"\n',
+    );
+    const result = await detectBuildCaches(tmpDir);
+    expect(result).toEqual([
+      { name: 'yarn-cache', path: path.resolve(tmpDir, '.custom-yarn-cache') },
+    ]);
+  });
+
+  it('should skip yarn cache when enableGlobalCache is true', async () => {
+    await fs.promises.writeFile(path.join(tmpDir, 'yarn.lock'), '');
+    await fs.promises.writeFile(
+      path.join(tmpDir, '.yarnrc.yml'),
+      'enableGlobalCache: true\nnodeLinker: node-modules\n',
+    );
+    const result = await detectBuildCaches(tmpDir);
+    expect(result).toEqual([]);
+  });
+
+  it('should skip yarn cache when enableGlobalCache is not set (defaults to true)', async () => {
+    await fs.promises.writeFile(path.join(tmpDir, 'yarn.lock'), '');
+    await fs.promises.writeFile(
+      path.join(tmpDir, '.yarnrc.yml'),
+      'nodeLinker: node-modules\n',
+    );
+    const result = await detectBuildCaches(tmpDir);
+    expect(result).toEqual([]);
+  });
+
+  it('should skip yarn cache when no yarn.lock', async () => {
+    await fs.promises.writeFile(
+      path.join(tmpDir, '.yarnrc.yml'),
+      'enableGlobalCache: false\n',
+    );
+    const result = await detectBuildCaches(tmpDir);
+    expect(result).toEqual([]);
+  });
+
+  it('should detect yarn cache alongside other build systems', async () => {
+    await fs.promises.writeFile(path.join(tmpDir, 'yarn.lock'), '');
+    await fs.promises.writeFile(
+      path.join(tmpDir, '.yarnrc.yml'),
+      'enableGlobalCache: false\n',
+    );
+    await fs.promises.writeFile(path.join(tmpDir, 'turbo.json'), '{}');
+    const result = await detectBuildCaches(tmpDir);
+    expect(result).toHaveLength(2);
+    expect(result.map(e => e.name)).toEqual(['turbo', 'yarn-cache']);
+  });
+
   it('should return empty array when no build systems detected', async () => {
     const result = await detectBuildCaches(tmpDir);
     expect(result).toEqual([]);
