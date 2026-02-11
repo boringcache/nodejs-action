@@ -6,6 +6,7 @@ import {
   detectBuildCaches,
   parseBuildCachePaths,
   mergeBuildCaches,
+  getPnpmStoreDir,
 } from '../lib/utils';
 
 let tmpDir: string;
@@ -177,6 +178,48 @@ describe('detectBuildCaches', () => {
     const result = await detectBuildCaches(tmpDir);
     expect(result).toHaveLength(2);
     expect(result.map(e => e.name)).toEqual(['turbo', 'yarn-cache']);
+  });
+
+  it('should detect pnpm store with default path', async () => {
+    await fs.promises.writeFile(path.join(tmpDir, 'pnpm-lock.yaml'), '');
+    const result = await detectBuildCaches(tmpDir);
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe('pnpm-store');
+    expect(result[0].path).toContain('pnpm');
+    expect(result[0].path).toContain('store');
+  });
+
+  it('should detect pnpm store with custom store-dir from .npmrc', async () => {
+    await fs.promises.writeFile(path.join(tmpDir, 'pnpm-lock.yaml'), '');
+    await fs.promises.writeFile(
+      path.join(tmpDir, '.npmrc'),
+      'store-dir=/custom/pnpm-store\n',
+    );
+    const result = await detectBuildCaches(tmpDir);
+    expect(result).toEqual([
+      { name: 'pnpm-store', path: '/custom/pnpm-store' },
+    ]);
+  });
+
+  it('should detect pnpm store with relative store-dir from .npmrc', async () => {
+    await fs.promises.writeFile(path.join(tmpDir, 'pnpm-lock.yaml'), '');
+    await fs.promises.writeFile(
+      path.join(tmpDir, '.npmrc'),
+      'store-dir=.pnpm-store\n',
+    );
+    const result = await detectBuildCaches(tmpDir);
+    expect(result).toEqual([
+      { name: 'pnpm-store', path: path.resolve(tmpDir, '.pnpm-store') },
+    ]);
+  });
+
+  it('should not detect pnpm store without pnpm-lock.yaml', async () => {
+    await fs.promises.writeFile(
+      path.join(tmpDir, '.npmrc'),
+      'store-dir=/custom/store\n',
+    );
+    const result = await detectBuildCaches(tmpDir);
+    expect(result).toEqual([]);
   });
 
   it('should return empty array when no build systems detected', async () => {

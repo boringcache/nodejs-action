@@ -29,7 +29,7 @@ This action caches the Node.js directories you explicitly choose.
 
 - Node.js is installed via mise.
 - `node_modules` is restored if a matching cache exists.
-- Build system caches (Turborepo, Nx, Next.js) are auto-detected and restored.
+- Build and package manager caches are auto-detected and restored.
 - Updated caches are saved after the job completes.
 
 Version detection order:
@@ -47,7 +47,7 @@ Package manager detection:
 Cache tags:
 - Node.js: `{cache-tag}-node-{version}`
 - Modules: `{cache-tag}-modules`
-- Build caches: `{cache-tag}-{name}` (e.g., `{cache-tag}-turbo`)
+- Build caches: `{cache-tag}-{name}` (e.g., `{cache-tag}-turbo`, `{cache-tag}-yarn-cache`, `{cache-tag}-pnpm-store`)
 
 ## Common patterns
 
@@ -98,7 +98,24 @@ Cache tags:
 
 ### Build cache (auto-detected)
 
-If your project uses Turborepo, Nx, or Next.js, their build caches are automatically detected and cached. No configuration needed.
+Build and package manager caches are automatically detected and cached. No configuration needed.
+
+| Tool | Detected by | Default cache path | Config respected |
+|------|-------------|-------------------|-----------------|
+| Turborepo | `turbo.json` | `.turbo/cache` | `cacheDir` in turbo.json |
+| Nx | `nx.json` | `.nx/cache` | `cacheDirectory` in nx.json |
+| Next.js | `next.config.{js,mjs,ts}` | `.next/cache` | - |
+| Yarn Berry | `.yarnrc.yml` + `yarn.lock` | `.yarn/cache` | `cacheFolder` in .yarnrc.yml |
+| pnpm | `pnpm-lock.yaml` | Platform-specific (see below) | `store-dir` in .npmrc |
+
+**Yarn Berry**: Only detected when `enableGlobalCache: false` is set in `.yarnrc.yml`. This is the local download cache containing zip archives. Without it, `yarn install` must re-download all packages from the registry on every CI run even when `node_modules` is cached.
+
+**pnpm store**: The content-addressable store where pnpm keeps downloaded packages. Default locations:
+- Linux: `~/.local/share/pnpm/store`
+- macOS: `~/Library/pnpm/store`
+- Windows: `%LOCALAPPDATA%/pnpm/store`
+
+Respects `$PNPM_HOME`, `$XDG_DATA_HOME`, and `store-dir` in `.npmrc`.
 
 ```yaml
 - uses: boringcache/nodejs-action@v1
@@ -110,8 +127,6 @@ If your project uses Turborepo, Nx, or Next.js, their build caches are automatic
 - run: npm install
 - run: npx turbo build  # .turbo/cache is auto-detected
 ```
-
-Detection reads `turbo.json`, `nx.json`, and `next.config.{js,mjs,ts}`. Custom cache directories configured in those files are respected.
 
 ### Build cache with custom paths
 
@@ -150,7 +165,7 @@ Override or add build cache paths manually:
 | `working-directory` | No | `.` | Project working directory. |
 | `cache-node` | No | `true` | Cache Node.js installation. |
 | `cache-modules` | No | `true` | Cache `node_modules`. |
-| `cache-build` | No | `true` | Auto-detect and cache build system outputs (Turborepo, Nx, Next.js). |
+| `cache-build` | No | `true` | Auto-detect and cache build system outputs (Turborepo, Nx, Next.js, Yarn Berry, pnpm store). |
 | `build-cache-paths` | No | `''` | Manual build cache paths in `name:path` format (newline-separated). |
 | `exclude` | No | - | Glob pattern to exclude from cache digest (e.g., `*.out`). |
 | `save-always` | No | `false` | Save cache even if job fails. |

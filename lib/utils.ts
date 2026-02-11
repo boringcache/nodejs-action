@@ -162,6 +162,26 @@ export async function pathExists(p: string): Promise<boolean> {
   }
 }
 
+export function getPnpmStoreDir(): string {
+  if (process.env.PNPM_HOME) {
+    return path.join(process.env.PNPM_HOME, 'store');
+  }
+  if (process.env.XDG_DATA_HOME) {
+    return path.join(process.env.XDG_DATA_HOME, 'pnpm', 'store');
+  }
+  if (isWindows) {
+    return path.join(
+      process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'),
+      'pnpm',
+      'store',
+    );
+  }
+  if (process.platform === 'darwin') {
+    return path.join(os.homedir(), 'Library', 'pnpm', 'store');
+  }
+  return path.join(os.homedir(), '.local', 'share', 'pnpm', 'store');
+}
+
 export interface BuildCacheEntry {
   name: string;
   path: string;
@@ -241,6 +261,29 @@ export async function detectBuildCaches(workingDir: string): Promise<BuildCacheE
         path: path.isAbsolute(cacheFolder) ? cacheFolder : path.resolve(workingDir, cacheFolder),
       });
     }
+  }
+
+  // pnpm
+  const pnpmLockPath = path.join(workingDir, 'pnpm-lock.yaml');
+  if (await pathExists(pnpmLockPath)) {
+    let storeDir = getPnpmStoreDir();
+    const npmrcPath = path.join(workingDir, '.npmrc');
+    if (await pathExists(npmrcPath)) {
+      try {
+        const content = await fs.promises.readFile(npmrcPath, 'utf-8');
+        for (const line of content.split('\n')) {
+          const match = line.match(/^store-dir\s*=\s*(.+)$/);
+          if (match) {
+            storeDir = match[1].trim();
+          }
+        }
+      } catch {
+      }
+    }
+    entries.push({
+      name: 'pnpm-store',
+      path: path.isAbsolute(storeDir) ? storeDir : path.resolve(workingDir, storeDir),
+    });
   }
 
   // Next.js
