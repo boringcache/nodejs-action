@@ -1,6 +1,6 @@
 {
   "name": "boringcache-nodejs",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Setup Node.js with mise and cache via BoringCache.",
   "main": "dist/restore/index.js",
   "scripts": {
