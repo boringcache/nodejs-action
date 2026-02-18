@@ -41621,7 +41621,7 @@ async function run() {
         const cacheNode = core.getInput('cache-node') !== 'false';
         const cacheModules = core.getInput('cache-modules') !== 'false';
         const verbose = core.getInput('verbose') === 'true';
-        const cliVersion = core.getInput('cli-version') || 'v1.0.0';
+        const cliVersion = core.getInput('cli-version') || 'v1.0.1';
         const nodeVersion = await (0, utils_1.getNodeVersion)(inputVersion, workingDir);
         const packageManager = await (0, utils_1.detectPackageManager)(workingDir);
         core.info(`Detected package manager: ${packageManager}`);
