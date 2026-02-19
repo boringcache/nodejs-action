@@ -7,13 +7,15 @@ import {
 
 describe('Turbo Remote Cache', () => {
   describe('configureTurboRemoteEnv', () => {
-    it('should set TURBO_API and TURBO_TOKEN', () => {
+    it('should set TURBO_API, TURBO_TOKEN, and default TURBO_TEAM', () => {
       configureTurboRemoteEnv('http://127.0.0.1:4227', 'my-token');
 
       expect(process.env.TURBO_API).toBe('http://127.0.0.1:4227');
       expect(process.env.TURBO_TOKEN).toBe('my-token');
+      expect(process.env.TURBO_TEAM).toBe('team_boringcache');
       expect(core.exportVariable).toHaveBeenCalledWith('TURBO_API', 'http://127.0.0.1:4227');
       expect(core.exportVariable).toHaveBeenCalledWith('TURBO_TOKEN', 'my-token');
+      expect(core.exportVariable).toHaveBeenCalledWith('TURBO_TEAM', 'team_boringcache');
     });
 
     it('should set TURBO_TEAM when provided', () => {
@@ -23,16 +25,11 @@ describe('Turbo Remote Cache', () => {
       expect(core.exportVariable).toHaveBeenCalledWith('TURBO_TEAM', 'my-team');
     });
 
-    it('should not set TURBO_TEAM when not provided', () => {
-      configureTurboRemoteEnv('http://127.0.0.1:4227', 'my-token');
-
-      expect(core.exportVariable).not.toHaveBeenCalledWith('TURBO_TEAM', expect.anything());
-    });
-
-    it('should not set TURBO_TEAM when empty string', () => {
+    it('should use default TURBO_TEAM when empty string', () => {
       configureTurboRemoteEnv('http://127.0.0.1:4227', 'my-token', '');
 
-      expect(core.exportVariable).not.toHaveBeenCalledWith('TURBO_TEAM', expect.anything());
+      expect(process.env.TURBO_TEAM).toBe('team_boringcache');
+      expect(core.exportVariable).toHaveBeenCalledWith('TURBO_TEAM', 'team_boringcache');
     });
   });
 

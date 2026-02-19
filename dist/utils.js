@@ -451,11 +451,10 @@ function configureTurboRemoteEnv(apiUrl, token, team) {
     core.exportVariable('TURBO_API', apiUrl);
     process.env.TURBO_TOKEN = token;
     core.exportVariable('TURBO_TOKEN', token);
-    if (team) {
-        process.env.TURBO_TEAM = team;
-        core.exportVariable('TURBO_TEAM', team);
-    }
-    core.info(`Turbo remote cache configured: api=${apiUrl}`);
+    const resolvedTeam = team || 'team_boringcache';
+    process.env.TURBO_TEAM = resolvedTeam;
+    core.exportVariable('TURBO_TEAM', resolvedTeam);
+    core.info(`Turbo remote cache configured: api=${apiUrl} team=${resolvedTeam}`);
 }
 function filterTurboFromBuildCaches(entries) {
     return entries.filter(e => e.name !== 'turbo');
