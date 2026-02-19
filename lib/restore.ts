@@ -111,14 +111,14 @@ async function run(): Promise<void> {
       } else {
         let port = turboPort;
         try {
-          const proxy = await startCacheRegistryProxy(workspace, port);
+          const proxy = await startCacheRegistryProxy(workspace, port, cacheTagPrefix);
           core.saveState('turboProxyPid', proxy.pid.toString());
           core.saveState('turboProxyPort', proxy.port.toString());
           configureTurboRemoteEnv(`http://127.0.0.1:${proxy.port}`, turboToken, turboTeam);
         } catch (e) {
           core.info(`Port ${port} unavailable, trying random port...`);
           port = await findAvailablePort();
-          const proxy = await startCacheRegistryProxy(workspace, port);
+          const proxy = await startCacheRegistryProxy(workspace, port, cacheTagPrefix);
           core.saveState('turboProxyPid', proxy.pid.toString());
           core.saveState('turboProxyPort', proxy.port.toString());
           configureTurboRemoteEnv(`http://127.0.0.1:${proxy.port}`, turboToken, turboTeam);
