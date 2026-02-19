@@ -14,6 +14,10 @@ import {
   parseBuildCachePaths,
   mergeBuildCaches,
   getMiseDataDir,
+  findAvailablePort,
+  startCacheRegistryProxy,
+  configureTurboRemoteEnv,
+  filterTurboFromBuildCaches,
 } from './utils';
 import * as path from 'path';
 
@@ -26,7 +30,7 @@ async function run(): Promise<void> {
     const cacheNode = core.getInput('cache-node') !== 'false';
     const cacheModules = core.getInput('cache-modules') !== 'false';
     const verbose = core.getInput('verbose') === 'true';
-    const cliVersion = core.getInput('cli-version') || 'v1.0.3';
+    const cliVersion = core.getInput('cli-version') || 'v1.1.0';
 
     const nodeVersion = await getNodeVersion(inputVersion, workingDir);
     const packageManager = await detectPackageManager(workingDir);
@@ -94,10 +98,43 @@ async function run(): Promise<void> {
       }
     }
 
+    // Turbo remote cache
+    const turboRemoteCache = core.getInput('turbo-remote-cache') === 'true';
+    if (turboRemoteCache) {
+      const turboApiUrl = core.getInput('turbo-api-url');
+      const turboToken = core.getInput('turbo-token') || 'boringcache';
+      const turboTeam = core.getInput('turbo-team');
+      const turboPort = parseInt(core.getInput('turbo-port') || '4227', 10);
+
+      if (turboApiUrl) {
+        configureTurboRemoteEnv(turboApiUrl, turboToken, turboTeam);
+      } else {
+        let port = turboPort;
+        try {
+          const proxy = await startCacheRegistryProxy(workspace, port);
+          core.saveState('turboProxyPid', proxy.pid.toString());
+          core.saveState('turboProxyPort', proxy.port.toString());
+          configureTurboRemoteEnv(`http://127.0.0.1:${proxy.port}`, turboToken, turboTeam);
+        } catch (e) {
+          core.info(`Port ${port} unavailable, trying random port...`);
+          port = await findAvailablePort();
+          const proxy = await startCacheRegistryProxy(workspace, port);
+          core.saveState('turboProxyPid', proxy.pid.toString());
+          core.saveState('turboProxyPort', proxy.port.toString());
+          configureTurboRemoteEnv(`http://127.0.0.1:${proxy.port}`, turboToken, turboTeam);
+        }
+      }
+
+      core.saveState('turboRemoteCache', 'true');
+    }
+
     // Restore build system caches
     const cacheBuild = core.getInput('cache-build') !== 'false';
     if (cacheBuild) {
-      const autoDetected = await detectBuildCaches(workingDir);
+      let autoDetected = await detectBuildCaches(workingDir);
+      if (turboRemoteCache) {
+        autoDetected = filterTurboFromBuildCaches(autoDetected);
+      }
       const userOverrides = parseBuildCachePaths(core.getInput('build-cache-paths'), workingDir);
       const buildCaches = mergeBuildCaches(autoDetected, userOverrides);
 

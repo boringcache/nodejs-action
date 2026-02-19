@@ -9,10 +9,12 @@ jest.mock('@actions/core', () => ({
   warning: jest.fn(),
   debug: jest.fn(),
   notice: jest.fn(),
+  error: jest.fn(),
   addPath: jest.fn(),
   setSecret: jest.fn(),
   saveState: jest.fn(),
   getState: jest.fn(),
+  exportVariable: jest.fn(),
 }));
 
 jest.mock('@actions/exec', () => ({

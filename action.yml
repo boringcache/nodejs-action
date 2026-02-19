@@ -10,7 +10,7 @@ inputs:
   cli-version:
     description: 'BoringCache CLI version (e.g., v1.0.0). Set to "skip" to disable automatic CLI setup.'
     required: false
-    default: 'v1.0.3'
+    default: 'v1.1.0'
   workspace:
     description: 'BoringCache workspace (e.g., "my-workspace" or "org/workspace")'
     required: false
@@ -40,6 +40,23 @@ inputs:
   exclude:
     description: 'Glob pattern to exclude files from cache digest (e.g., "*.out")'
     required: false
+  turbo-remote-cache:
+    description: 'Enable Turborepo remote cache via a local BoringCache proxy. Replaces local .turbo/cache directory caching with per-object CAS dedup.'
+    required: false
+    default: 'false'
+  turbo-api-url:
+    description: 'External Turbo remote cache API URL. When set, skips starting a local proxy and uses this URL directly.'
+    required: false
+  turbo-token:
+    description: 'Turbo remote cache token. Auto-generated for local proxy mode; required when turbo-api-url is set.'
+    required: false
+  turbo-team:
+    description: 'Turbo team name (sets TURBO_TEAM env var)'
+    required: false
+  turbo-port:
+    description: 'Port for the local Turbo remote cache proxy'
+    required: false
+    default: '4227'
   cache-build:
     description: 'Auto-detect and cache build system outputs (Turborepo, Nx, Next.js, Yarn Berry, pnpm store)'
     required: false

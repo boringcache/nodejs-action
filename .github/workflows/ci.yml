@@ -46,3 +46,132 @@ jobs:
 
       - run: node --version
       - run: npm --version
+
+  test-turbo-remote:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - run: npm install
+      - run: npm run build
+
+      - name: Setup Node.js with Turbo remote cache
+        uses: ./
+        env:
+          BORINGCACHE_API_TOKEN: ${{ secrets.BORINGCACHE_API_TOKEN }}
+        with:
+          workspace: boringcache/cli
+          turbo-remote-cache: 'true'
+
+      - name: Verify Turbo env vars
+        run: |
+          set -euo pipefail
+          echo "TURBO_API=$TURBO_API"
+          echo "TURBO_TOKEN=$TURBO_TOKEN"
+          [[ -n "$TURBO_API" ]] || { echo "TURBO_API not set"; exit 1; }
+          [[ -n "$TURBO_TOKEN" ]] || { echo "TURBO_TOKEN not set"; exit 1; }
+
+      - name: Test Turbo remote cache API via proxy
+        run: |
+          set -euo pipefail
+
+          TURBO_AUTH="authorization: Bearer ${TURBO_TOKEN}"
+          TURBO_HASH=$(printf 'turbo-e2e-%s-%s' "${GITHUB_RUN_ID}" "${GITHUB_RUN_ATTEMPT}" | sha256sum | awk '{print $1}')
+
+          echo "=== Status check ==="
+          STATUS=$(curl -fsS -H "${TURBO_AUTH}" "${TURBO_API}/v8/artifacts/status")
+          echo "$STATUS"
+          echo "$STATUS" | grep -q '"status":"enabled"'
+
+          echo "=== PUT artifact ==="
+          printf 'turbo-e2e-payload-%s\n' "${TURBO_HASH}" > /tmp/turbo-artifact.bin
+          RESP=$(curl -sS -o /dev/null -w "%{http_code}" -X PUT -H "${TURBO_AUTH}" --data-binary @/tmp/turbo-artifact.bin "${TURBO_API}/v8/artifacts/${TURBO_HASH}")
+          echo "PUT status: $RESP"
+          [[ "$RESP" == "202" ]] || { echo "Expected 202, got $RESP"; exit 1; }
+
+          echo "=== GET artifact ==="
+          curl -fsS -H "${TURBO_AUTH}" "${TURBO_API}/v8/artifacts/${TURBO_HASH}" -o /tmp/turbo-artifact-get.bin
+          if ! cmp -s /tmp/turbo-artifact.bin /tmp/turbo-artifact-get.bin; then
+            echo "Artifact round-trip mismatch"
+            exit 1
+          fi
+          echo "Round-trip verified"
+
+          echo "=== Query artifacts ==="
+          QUERY_RESP=$(curl -fsS -X POST -H "${TURBO_AUTH}" -H "content-type: application/json" -d "{\"hashes\":[\"${TURBO_HASH}\",\"deadbeef\"]}" "${TURBO_API}/v8/artifacts")
+          echo "$QUERY_RESP"
+          echo "$QUERY_RESP" | grep -q "\"${TURBO_HASH}\""
+          echo "$QUERY_RESP" | grep -q '"size"'
+
+          echo "=== Events ==="
+          EVENTS_RESP=$(curl -sS -o /dev/null -w "%{http_code}" -X POST -H "${TURBO_AUTH}" -H "content-type: application/json" -d "[{\"sessionId\":\"e2e\",\"source\":\"REMOTE\",\"event\":\"HIT\",\"hash\":\"${TURBO_HASH}\",\"duration\":7}]" "${TURBO_API}/v8/artifacts/events")
+          echo "Events status: $EVENTS_RESP"
+          [[ "$EVENTS_RESP" == "200" ]] || { echo "Expected 200, got $EVENTS_RESP"; exit 1; }
+
+          echo "All Turbo remote cache API checks passed"
+
+      - name: Build real Turborepo project
+        run: |
+          set -euo pipefail
+
+          mkdir -p turbo-test/packages/ui/src turbo-test/packages/utils/src
+          cd turbo-test
+
+          cat > package.json << 'PKGJSON'
+          {
+            "name": "turbo-test",
+            "private": true,
+            "workspaces": ["packages/*"]
+          }
+          PKGJSON
+
+          cat > turbo.json << 'TURBOJSON'
+          {
+            "$schema": "https://turbo.build/schema.json",
+            "tasks": {
+              "build": {
+                "outputs": ["dist/**"]
+              }
+            }
+          }
+          TURBOJSON
+
+          cat > packages/ui/package.json << 'UIPKG'
+          {
+            "name": "@turbo-test/ui",
+            "version": "1.0.0",
+            "scripts": { "build": "mkdir -p dist && echo 'built ui' > dist/index.js" }
+          }
+          UIPKG
+
+          cat > packages/utils/package.json << 'UTILSPKG'
+          {
+            "name": "@turbo-test/utils",
+            "version": "1.0.0",
+            "scripts": { "build": "mkdir -p dist && echo 'built utils' > dist/index.js" }
+          }
+          UTILSPKG
+
+          echo "export const Button = 'button';" > packages/ui/src/index.ts
+          echo "export const add = (a, b) => a + b;" > packages/utils/src/index.ts
+
+          npm install
+          npx turbo@latest build --verbosity=2
+
+          echo "=== First build done, running again to test cache ==="
+          npx turbo@latest build --verbosity=2 2>&1 | tee /tmp/turbo-second-build.log
+
+          if grep -q "cache hit" /tmp/turbo-second-build.log || grep -q "FULL TURBO" /tmp/turbo-second-build.log; then
+            echo "Turbo remote cache hit confirmed"
+          else
+            echo "WARNING: No cache hit on second build (may be expected on first run)"
+          fi

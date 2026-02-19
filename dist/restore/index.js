@@ -41621,7 +41621,7 @@ async function run() {
         const cacheNode = core.getInput('cache-node') !== 'false';
         const cacheModules = core.getInput('cache-modules') !== 'false';
         const verbose = core.getInput('verbose') === 'true';
-        const cliVersion = core.getInput('cli-version') || 'v1.0.3';
+        const cliVersion = core.getInput('cli-version') || 'v1.1.0';
         const nodeVersion = await (0, utils_1.getNodeVersion)(inputVersion, workingDir);
         const packageManager = await (0, utils_1.detectPackageManager)(workingDir);
         core.info(`Detected package manager: ${packageManager}`);
@@ -41683,10 +41683,42 @@ async function run() {
                 core.info('Modules cache not found');
             }
         }
+        // Turbo remote cache
+        const turboRemoteCache = core.getInput('turbo-remote-cache') === 'true';
+        if (turboRemoteCache) {
+            const turboApiUrl = core.getInput('turbo-api-url');
+            const turboToken = core.getInput('turbo-token') || 'boringcache';
+            const turboTeam = core.getInput('turbo-team');
+            const turboPort = parseInt(core.getInput('turbo-port') || '4227', 10);
+            if (turboApiUrl) {
+                (0, utils_1.configureTurboRemoteEnv)(turboApiUrl, turboToken, turboTeam);
+            }
+            else {
+                let port = turboPort;
+                try {
+                    const proxy = await (0, utils_1.startCacheRegistryProxy)(workspace, port);
+                    core.saveState('turboProxyPid', proxy.pid.toString());
+                    core.saveState('turboProxyPort', proxy.port.toString());
+                    (0, utils_1.configureTurboRemoteEnv)(`http://127.0.0.1:${proxy.port}`, turboToken, turboTeam);
+                }
+                catch (e) {
+                    core.info(`Port ${port} unavailable, trying random port...`);
+                    port = await (0, utils_1.findAvailablePort)();
+                    const proxy = await (0, utils_1.startCacheRegistryProxy)(workspace, port);
+                    core.saveState('turboProxyPid', proxy.pid.toString());
+                    core.saveState('turboProxyPort', proxy.port.toString());
+                    (0, utils_1.configureTurboRemoteEnv)(`http://127.0.0.1:${proxy.port}`, turboToken, turboTeam);
+                }
+            }
+            core.saveState('turboRemoteCache', 'true');
+        }
         // Restore build system caches
         const cacheBuild = core.getInput('cache-build') !== 'false';
         if (cacheBuild) {
-            const autoDetected = await (0, utils_1.detectBuildCaches)(workingDir);
+            let autoDetected = await (0, utils_1.detectBuildCaches)(workingDir);
+            if (turboRemoteCache) {
+                autoDetected = (0, utils_1.filterTurboFromBuildCaches)(autoDetected);
+            }
             const userOverrides = (0, utils_1.parseBuildCachePaths)(core.getInput('build-cache-paths'), workingDir);
             const buildCaches = (0, utils_1.mergeBuildCaches)(autoDetected, userOverrides);
             if (buildCaches.length > 0) {
@@ -41773,11 +41805,19 @@ exports.getPnpmStoreDir = getPnpmStoreDir;
 exports.detectBuildCaches = detectBuildCaches;
 exports.parseBuildCachePaths = parseBuildCachePaths;
 exports.mergeBuildCaches = mergeBuildCaches;
+exports.findAvailablePort = findAvailablePort;
+exports.startCacheRegistryProxy = startCacheRegistryProxy;
+exports.stopCacheRegistryProxy = stopCacheRegistryProxy;
+exports.configureTurboRemoteEnv = configureTurboRemoteEnv;
+exports.filterTurboFromBuildCaches = filterTurboFromBuildCaches;
 const core = __importStar(__nccwpck_require__(7484));
 const exec = __importStar(__nccwpck_require__(5236));
 const fs = __importStar(__nccwpck_require__(9896));
 const path = __importStar(__nccwpck_require__(6928));
 const os = __importStar(__nccwpck_require__(857));
+const net = __importStar(__nccwpck_require__(9278));
+const http = __importStar(__nccwpck_require__(8611));
+const child_process_1 = __nccwpck_require__(5317);
 const action_core_1 = __nccwpck_require__(8701);
 Object.defineProperty(exports, "ensureBoringCache", ({ enumerable: true, get: function () { return action_core_1.ensureBoringCache; } }));
 Object.defineProperty(exports, "execBoringCache", ({ enumerable: true, get: function () { return action_core_1.execBoringCache; } }));
@@ -42070,6 +42110,110 @@ function mergeBuildCaches(autoDetected, userOverrides) {
         map.set(entry.name, entry);
     }
     return Array.from(map.values());
+}
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+function httpGet(url) {
+    return new Promise((resolve, reject) => {
+        const req = http.get(url, (res) => {
+            res.resume();
+            if (res.statusCode && res.statusCode >= 200 && res.statusCode < 400) {
+                resolve(res.statusCode);
+            }
+            else {
+                reject(new Error(`HTTP ${res.statusCode}`));
+            }
+        });
+        req.on('error', reject);
+        req.setTimeout(2000, () => {
+            req.destroy();
+            reject(new Error('timeout'));
+        });
+    });
+}
+async function findAvailablePort() {
+    return new Promise((resolve, reject) => {
+        const server = net.createServer();
+        server.listen(0, '127.0.0.1', () => {
+            const addr = server.address();
+            if (addr && typeof addr !== 'string') {
+                const port = addr.port;
+                server.close(() => resolve(port));
+            }
+            else {
+                server.close(() => reject(new Error('Failed to get port')));
+            }
+        });
+        server.on('error', reject);
+    });
+}
+async function startCacheRegistryProxy(workspace, port) {
+    const logFile = path.join(os.tmpdir(), `boringcache-proxy-${port}.log`);
+    const fd = fs.openSync(logFile, 'w');
+    const child = (0, child_process_1.spawn)('boringcache', [
+        'cache-registry', workspace,
+        '--host', '127.0.0.1',
+        '--port', port.toString(),
+        '--no-platform',
+        '--no-git'
+    ], {
+        detached: true,
+        stdio: ['ignore', fd, fd]
+    });
+    child.unref();
+    fs.closeSync(fd);
+    if (!child.pid) {
+        throw new Error('Failed to start cache-registry proxy');
+    }
+    core.info(`Cache-registry proxy starting (pid=${child.pid}, port=${port})...`);
+    const maxWait = 30000;
+    const interval = 500;
+    const start = Date.now();
+    while (Date.now() - start < maxWait) {
+        try {
+            await httpGet(`http://127.0.0.1:${port}/v2/`);
+            core.info(`Cache-registry proxy ready on port ${port}`);
+            return { pid: child.pid, port };
+        }
+        catch {
+            await sleep(interval);
+        }
+    }
+    try {
+        const logs = fs.readFileSync(logFile, 'utf-8');
+        core.error(`Cache-registry proxy logs:\n${logs}`);
+    }
+    catch { }
+    throw new Error(`Cache-registry proxy failed to become ready within ${maxWait / 1000}s`);
+}
+async function stopCacheRegistryProxy(pid) {
+    try {
+        process.kill(pid, 'SIGTERM');
+        core.info(`Stopped cache-registry proxy (pid=${pid})`);
+    }
+    catch (err) {
+        if (err.code === 'ESRCH') {
+            core.info(`Cache-registry proxy (pid=${pid}) already exited`);
+        }
+        else {
+            core.warning(`Failed to stop cache-registry proxy: ${err.message}`);
+        }
+    }
+}
+function configureTurboRemoteEnv(apiUrl, token, team) {
+    process.env.TURBO_API = apiUrl;
+    core.exportVariable('TURBO_API', apiUrl);
+    process.env.TURBO_TOKEN = token;
+    core.exportVariable('TURBO_TOKEN', token);
+    if (team) {
+        process.env.TURBO_TEAM = team;
+        core.exportVariable('TURBO_TEAM', team);
+    }
+    core.info(`Turbo remote cache configured: api=${apiUrl}`);
+}
+function filterTurboFromBuildCaches(entries) {
+    return entries.filter(e => e.name !== 'turbo');
 }
 
 

@@ -90,6 +90,10 @@ async function run() {
                 }
             }
         }
+        const turboProxyPid = core.getState('turboProxyPid');
+        if (turboProxyPid) {
+            await (0, utils_1.stopCacheRegistryProxy)(parseInt(turboProxyPid, 10));
+        }
         core.info('Save complete');
     }
     catch (error) {

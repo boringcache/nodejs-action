@@ -1,5 +1,5 @@
 import * as core from '@actions/core';
-import { execBoringCache, getMiseDataDir } from './utils';
+import { execBoringCache, getMiseDataDir, stopCacheRegistryProxy } from './utils';
 import * as path from 'path';
 
 async function run(): Promise<void> {
@@ -59,6 +59,11 @@ async function run(): Promise<void> {
           await execBoringCache(args);
         }
       }
+    }
+
+    const turboProxyPid = core.getState('turboProxyPid');
+    if (turboProxyPid) {
+      await stopCacheRegistryProxy(parseInt(turboProxyPid, 10));
     }
 
     core.info('Save complete');
