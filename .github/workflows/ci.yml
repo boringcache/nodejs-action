@@ -69,7 +69,7 @@ jobs:
         env:
           BORINGCACHE_API_TOKEN: ${{ secrets.BORINGCACHE_API_TOKEN }}
         with:
-          workspace: boringcache/cli
+          workspace: boringcache/actions
           turbo-remote-cache: 'true'
 
       - name: Verify Turbo env vars
@@ -84,38 +84,57 @@ jobs:
         run: |
           set -euo pipefail
 
+          mkdir -p /tmp/turbo-e2e
+
+          run_http() {
+            local expected_status="$1"
+            local output_path="$2"
+            shift 2
+            local status
+            status=$(curl -sS -o "${output_path}" -w "%{http_code}" "$@")
+            if [[ "${status}" != "${expected_status}" ]]; then
+              echo "unexpected status: expected ${expected_status}, got ${status}"
+              echo "curl args: $*"
+              if [[ -f "${output_path}" ]]; then
+                echo "response body:"
+                cat "${output_path}"
+              fi
+              echo "=== proxy logs ==="
+              cat /tmp/boringcache-proxy-*.log 2>/dev/null || echo "no proxy logs found"
+              exit 1
+            fi
+          }
+
           TURBO_AUTH="authorization: Bearer ${TURBO_TOKEN}"
-          TURBO_HASH=$(printf 'turbo-e2e-%s-%s' "${GITHUB_RUN_ID}" "${GITHUB_RUN_ATTEMPT}" | sha256sum | awk '{print $1}')
+          TURBO_HASH=$(printf 'turbo-e2e-%s-%s-%s' "${GITHUB_RUN_ID}" "${GITHUB_RUN_ATTEMPT}" "$(date +%s)" | shasum -a 256 | awk '{print $1}')
 
           echo "=== Status check ==="
-          STATUS=$(curl -fsS -H "${TURBO_AUTH}" "${TURBO_API}/v8/artifacts/status")
-          echo "$STATUS"
-          echo "$STATUS" | grep -q '"status":"enabled"'
+          run_http "200" /tmp/turbo-e2e/status.json -H "${TURBO_AUTH}" "${TURBO_API}/v8/artifacts/status"
+          cat /tmp/turbo-e2e/status.json
+          grep -q '"status":"enabled"' /tmp/turbo-e2e/status.json
 
           echo "=== PUT artifact ==="
-          printf 'turbo-e2e-payload-%s\n' "${TURBO_HASH}" > /tmp/turbo-artifact.bin
-          RESP=$(curl -sS -o /dev/null -w "%{http_code}" -X PUT -H "${TURBO_AUTH}" --data-binary @/tmp/turbo-artifact.bin "${TURBO_API}/v8/artifacts/${TURBO_HASH}")
-          echo "PUT status: $RESP"
-          [[ "$RESP" == "202" ]] || { echo "Expected 202, got $RESP"; exit 1; }
+          printf 'turbo-e2e-payload-%s\n' "${TURBO_HASH}" > /tmp/turbo-e2e/artifact.bin
+          run_http "202" /tmp/turbo-e2e/put.json -X PUT -H "${TURBO_AUTH}" --data-binary @/tmp/turbo-e2e/artifact.bin "${TURBO_API}/v8/artifacts/${TURBO_HASH}"
+          cat /tmp/turbo-e2e/put.json
+          grep -q '"urls"' /tmp/turbo-e2e/put.json
 
           echo "=== GET artifact ==="
-          curl -fsS -H "${TURBO_AUTH}" "${TURBO_API}/v8/artifacts/${TURBO_HASH}" -o /tmp/turbo-artifact-get.bin
-          if ! cmp -s /tmp/turbo-artifact.bin /tmp/turbo-artifact-get.bin; then
+          run_http "200" /tmp/turbo-e2e/artifact-get.bin -H "${TURBO_AUTH}" "${TURBO_API}/v8/artifacts/${TURBO_HASH}"
+          if ! cmp -s /tmp/turbo-e2e/artifact.bin /tmp/turbo-e2e/artifact-get.bin; then
             echo "Artifact round-trip mismatch"
             exit 1
           fi
           echo "Round-trip verified"
 
           echo "=== Query artifacts ==="
-          QUERY_RESP=$(curl -fsS -X POST -H "${TURBO_AUTH}" -H "content-type: application/json" -d "{\"hashes\":[\"${TURBO_HASH}\",\"deadbeef\"]}" "${TURBO_API}/v8/artifacts")
-          echo "$QUERY_RESP"
-          echo "$QUERY_RESP" | grep -q "\"${TURBO_HASH}\""
-          echo "$QUERY_RESP" | grep -q '"size"'
+          run_http "200" /tmp/turbo-e2e/query.json -X POST -H "${TURBO_AUTH}" -H "content-type: application/json" -d "{\"hashes\":[\"${TURBO_HASH}\",\"deadbeef\"]}" "${TURBO_API}/v8/artifacts"
+          cat /tmp/turbo-e2e/query.json
+          grep -q "\"${TURBO_HASH}\"" /tmp/turbo-e2e/query.json
+          grep -q '"size"' /tmp/turbo-e2e/query.json
 
           echo "=== Events ==="
-          EVENTS_RESP=$(curl -sS -o /dev/null -w "%{http_code}" -X POST -H "${TURBO_AUTH}" -H "content-type: application/json" -d "[{\"sessionId\":\"e2e\",\"source\":\"REMOTE\",\"event\":\"HIT\",\"hash\":\"${TURBO_HASH}\",\"duration\":7}]" "${TURBO_API}/v8/artifacts/events")
-          echo "Events status: $EVENTS_RESP"
-          [[ "$EVENTS_RESP" == "200" ]] || { echo "Expected 200, got $EVENTS_RESP"; exit 1; }
+          run_http "200" /tmp/turbo-e2e/events.txt -X POST -H "${TURBO_AUTH}" -H "content-type: application/json" -d "[{\"sessionId\":\"e2e\",\"source\":\"REMOTE\",\"event\":\"HIT\",\"hash\":\"${TURBO_HASH}\",\"duration\":7}]" "${TURBO_API}/v8/artifacts/events"
 
           echo "All Turbo remote cache API checks passed"
 
@@ -175,3 +194,12 @@ jobs:
           else
             echo "WARNING: No cache hit on second build (may be expected on first run)"
           fi
+
+      - name: Upload proxy logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: turbo-proxy-logs-${{ matrix.os }}
+          path: |
+            /tmp/boringcache-proxy-*.log
+            /tmp/turbo-e2e/**
