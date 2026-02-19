@@ -145,10 +145,12 @@ jobs:
           mkdir -p turbo-test/packages/ui/src turbo-test/packages/utils/src
           cd turbo-test
 
-          cat > package.json << 'PKGJSON'
+          NPM_VERSION=$(npm --version)
+          cat > package.json << PKGJSON
           {
             "name": "turbo-test",
             "private": true,
+            "packageManager": "npm@${NPM_VERSION}",
             "workspaces": ["packages/*"]
           }
           PKGJSON
