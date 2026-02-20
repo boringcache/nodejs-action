@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.execBoringCache = exports.ensureBoringCache = void 0;
+exports.findAvailablePort = exports.stopRegistryProxy = exports.waitForProxy = exports.startRegistryProxy = exports.pathExists = exports.execBoringCache = exports.ensureBoringCache = void 0;
 exports.getMiseBinPath = getMiseBinPath;
 exports.getMiseDataDir = getMiseDataDir;
 exports.getWorkspace = getWorkspace;
@@ -44,12 +44,10 @@ exports.detectPackageManager = detectPackageManager;
 exports.installMise = installMise;
 exports.installNode = installNode;
 exports.activateNode = activateNode;
-exports.pathExists = pathExists;
 exports.getPnpmStoreDir = getPnpmStoreDir;
 exports.detectBuildCaches = detectBuildCaches;
 exports.parseBuildCachePaths = parseBuildCachePaths;
 exports.mergeBuildCaches = mergeBuildCaches;
-exports.findAvailablePort = findAvailablePort;
 exports.startCacheRegistryProxy = startCacheRegistryProxy;
 exports.stopCacheRegistryProxy = stopCacheRegistryProxy;
 exports.configureTurboRemoteEnv = configureTurboRemoteEnv;
@@ -59,12 +57,14 @@ const exec = __importStar(require("@actions/exec"));
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const os = __importStar(require("os"));
-const net = __importStar(require("net"));
-const http = __importStar(require("http"));
-const child_process_1 = require("child_process");
 const action_core_1 = require("@boringcache/action-core");
 Object.defineProperty(exports, "ensureBoringCache", { enumerable: true, get: function () { return action_core_1.ensureBoringCache; } });
 Object.defineProperty(exports, "execBoringCache", { enumerable: true, get: function () { return action_core_1.execBoringCache; } });
+Object.defineProperty(exports, "pathExists", { enumerable: true, get: function () { return action_core_1.pathExists; } });
+Object.defineProperty(exports, "startRegistryProxy", { enumerable: true, get: function () { return action_core_1.startRegistryProxy; } });
+Object.defineProperty(exports, "waitForProxy", { enumerable: true, get: function () { return action_core_1.waitForProxy; } });
+Object.defineProperty(exports, "stopRegistryProxy", { enumerable: true, get: function () { return action_core_1.stopRegistryProxy; } });
+Object.defineProperty(exports, "findAvailablePort", { enumerable: true, get: function () { return action_core_1.findAvailablePort; } });
 const isWindows = process.platform === 'win32';
 function getMiseBinPath() {
     const homedir = os.homedir();
@@ -79,26 +79,10 @@ function getMiseDataDir() {
     return path.join(os.homedir(), '.local', 'share', 'mise');
 }
 function getWorkspace(inputWorkspace) {
-    let workspace = inputWorkspace || process.env.BORINGCACHE_DEFAULT_WORKSPACE || '';
-    if (!workspace) {
-        core.setFailed('Workspace is required. Set workspace input or BORINGCACHE_DEFAULT_WORKSPACE env var.');
-        throw new Error('Workspace required');
-    }
-    if (!workspace.includes('/')) {
-        workspace = `default/${workspace}`;
-    }
-    return workspace;
+    return (0, action_core_1.getWorkspace)(inputWorkspace);
 }
 function getCacheTagPrefix(inputCacheTag) {
-    if (inputCacheTag) {
-        return inputCacheTag;
-    }
-    const repo = process.env.GITHUB_REPOSITORY || '';
-    if (repo) {
-        const repoName = repo.split('/')[1] || repo;
-        return repoName;
-    }
-    return 'nodejs';
+    return (0, action_core_1.getCacheTagPrefix)(inputCacheTag, 'nodejs');
 }
 async function getNodeVersion(inputVersion, workingDir) {
     if (inputVersion) {
@@ -141,10 +125,10 @@ async function getFileHash(filePath) {
     }
 }
 async function detectPackageManager(workingDir) {
-    if (await pathExists(path.join(workingDir, 'pnpm-lock.yaml'))) {
+    if (await (0, action_core_1.pathExists)(path.join(workingDir, 'pnpm-lock.yaml'))) {
         return 'pnpm';
     }
-    if (await pathExists(path.join(workingDir, 'yarn.lock'))) {
+    if (await (0, action_core_1.pathExists)(path.join(workingDir, 'yarn.lock'))) {
         return 'yarn';
     }
     return 'npm';
@@ -188,15 +172,6 @@ async function activateNode(version) {
     const misePath = getMiseBinPath();
     await exec.exec(misePath, ['use', '-g', `node@${version}`]);
 }
-async function pathExists(p) {
-    try {
-        await fs.promises.access(p);
-        return true;
-    }
-    catch {
-        return false;
-    }
-}
 function getPnpmStoreDir() {
     if (process.env.PNPM_HOME) {
         return path.join(process.env.PNPM_HOME, 'store');
@@ -217,7 +192,7 @@ async function detectBuildCaches(workingDir) {
     const entries = [];
     // Turbo
     const turboJsonPath = path.join(workingDir, 'turbo.json');
-    if (await pathExists(turboJsonPath)) {
+    if (await (0, action_core_1.pathExists)(turboJsonPath)) {
         let cacheDir = '.turbo/cache';
         try {
             const content = await fs.promises.readFile(turboJsonPath, 'utf-8');
@@ -236,7 +211,7 @@ async function detectBuildCaches(workingDir) {
     }
     // Nx
     const nxJsonPath = path.join(workingDir, 'nx.json');
-    if (await pathExists(nxJsonPath)) {
+    if (await (0, action_core_1.pathExists)(nxJsonPath)) {
         let cacheDir = '.nx/cache';
         try {
             const content = await fs.promises.readFile(nxJsonPath, 'utf-8');
@@ -260,7 +235,7 @@ async function detectBuildCaches(workingDir) {
     // Yarn Berry
     const yarnrcPath = path.join(workingDir, '.yarnrc.yml');
     const yarnLockPath = path.join(workingDir, 'yarn.lock');
-    if (await pathExists(yarnrcPath) && await pathExists(yarnLockPath)) {
+    if (await (0, action_core_1.pathExists)(yarnrcPath) && await (0, action_core_1.pathExists)(yarnLockPath)) {
         let cacheFolder = '.yarn/cache';
         let enableGlobalCache = true;
         try {
@@ -288,10 +263,10 @@ async function detectBuildCaches(workingDir) {
     }
     // pnpm
     const pnpmLockPath = path.join(workingDir, 'pnpm-lock.yaml');
-    if (await pathExists(pnpmLockPath)) {
+    if (await (0, action_core_1.pathExists)(pnpmLockPath)) {
         let storeDir = getPnpmStoreDir();
         const npmrcPath = path.join(workingDir, '.npmrc');
-        if (await pathExists(npmrcPath)) {
+        if (await (0, action_core_1.pathExists)(npmrcPath)) {
             try {
                 const content = await fs.promises.readFile(npmrcPath, 'utf-8');
                 for (const line of content.split('\n')) {
@@ -312,7 +287,7 @@ async function detectBuildCaches(workingDir) {
     // Next.js
     const nextConfigs = ['next.config.js', 'next.config.mjs', 'next.config.ts'];
     for (const configFile of nextConfigs) {
-        if (await pathExists(path.join(workingDir, configFile))) {
+        if (await (0, action_core_1.pathExists)(path.join(workingDir, configFile))) {
             entries.push({
                 name: 'nextjs',
                 path: path.resolve(workingDir, '.next/cache'),
@@ -355,96 +330,21 @@ function mergeBuildCaches(autoDetected, userOverrides) {
     }
     return Array.from(map.values());
 }
-function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}
-function httpGet(url) {
-    return new Promise((resolve, reject) => {
-        const req = http.get(url, (res) => {
-            res.resume();
-            if (res.statusCode && res.statusCode >= 200 && res.statusCode < 400) {
-                resolve(res.statusCode);
-            }
-            else {
-                reject(new Error(`HTTP ${res.statusCode}`));
-            }
-        });
-        req.on('error', reject);
-        req.setTimeout(2000, () => {
-            req.destroy();
-            reject(new Error('timeout'));
-        });
-    });
-}
-async function findAvailablePort() {
-    return new Promise((resolve, reject) => {
-        const server = net.createServer();
-        server.listen(0, '127.0.0.1', () => {
-            const addr = server.address();
-            if (addr && typeof addr !== 'string') {
-                const port = addr.port;
-                server.close(() => resolve(port));
-            }
-            else {
-                server.close(() => reject(new Error('Failed to get port')));
-            }
-        });
-        server.on('error', reject);
-    });
-}
 async function startCacheRegistryProxy(workspace, port, tag) {
-    const logFile = path.join(os.tmpdir(), `boringcache-proxy-${port}.log`);
-    const fd = fs.openSync(logFile, 'w');
-    const args = [
-        'cache-registry', workspace,
-    ];
-    if (tag) {
-        args.push(tag);
-    }
-    args.push('--host', '127.0.0.1', '--port', port.toString(), '--no-platform', '--no-git');
-    const child = (0, child_process_1.spawn)('boringcache', args, {
-        detached: true,
-        stdio: ['ignore', fd, fd]
+    const proxy = await (0, action_core_1.startRegistryProxy)({
+        command: 'cache-registry',
+        workspace,
+        tag,
+        host: '127.0.0.1',
+        port,
+        noPlatform: true,
+        noGit: true,
     });
-    child.unref();
-    fs.closeSync(fd);
-    if (!child.pid) {
-        throw new Error('Failed to start cache-registry proxy');
-    }
-    core.info(`Cache-registry proxy starting (pid=${child.pid}, port=${port})...`);
-    const maxWait = 30000;
-    const interval = 500;
-    const start = Date.now();
-    while (Date.now() - start < maxWait) {
-        try {
-            await httpGet(`http://127.0.0.1:${port}/v2/`);
-            core.info(`Cache-registry proxy ready on port ${port}`);
-            return { pid: child.pid, port };
-        }
-        catch {
-            await sleep(interval);
-        }
-    }
-    try {
-        const logs = fs.readFileSync(logFile, 'utf-8');
-        core.error(`Cache-registry proxy logs:\n${logs}`);
-    }
-    catch { }
-    throw new Error(`Cache-registry proxy failed to become ready within ${maxWait / 1000}s`);
+    await (0, action_core_1.waitForProxy)(proxy.port, 30000, proxy.pid);
+    return proxy;
 }
 async function stopCacheRegistryProxy(pid) {
-    try {
-        process.kill(pid, 'SIGTERM');
-        core.info(`Stopped cache-registry proxy (pid=${pid})`);
-    }
-    catch (err) {
-        if (err.code === 'ESRCH') {
-            core.info(`Cache-registry proxy (pid=${pid}) already exited`);
-        }
-        else {
-            core.warning(`Failed to stop cache-registry proxy: ${err.message}`);
-        }
-    }
+    await (0, action_core_1.stopRegistryProxy)(pid);
 }
 function configureTurboRemoteEnv(apiUrl, token, team) {
     process.env.TURBO_API = apiUrl;
