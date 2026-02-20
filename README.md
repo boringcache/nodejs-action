@@ -1,14 +1,8 @@
 # boringcache/nodejs-action
 
-**Cache once. Reuse everywhere.**
+Setup Node.js and cache `node_modules` + build tool outputs (Turbo, Nx, Next.js) with BoringCache.
 
-BoringCache is a universal build artifact cache for CI, Docker, and local development. It stores and restores directories you choose so build outputs, dependencies, and tool caches can be reused across environments.
-
-BoringCache does not run builds and is not tied to any build tool. It works with any language, framework, or workflow by caching directories explicitly selected by the user.
-
-Caches are content-addressed and verified before restore. If identical content already exists, uploads are skipped. The same cache can be reused in GitHub Actions, Docker/BuildKit, and on developer machines using the same CLI.
-
-This action installs Node.js and configures BoringCache to cache its artifacts. It uses the same BoringCache CLI and cache format as all other BoringCache actions.
+Installs Node via [mise](https://mise.jdx.dev), restores cached directories before your job runs, and saves them when it finishes. Caches are content-addressed — identical content is never re-uploaded.
 
 ## Quick start
 
@@ -158,7 +152,7 @@ Override or add build cache paths manually:
 
 | Input | Required | Default | Description |
 |-------|----------|---------|-------------|
-| `cli-version` | No | `v1.0.2` | BoringCache CLI version. Set to `skip` to disable installation. |
+| `cli-version` | No | `v1.2.0` | BoringCache CLI version. Set to `skip` to disable installation. |
 | `workspace` | No | repo name | Workspace in `org/repo` form. Defaults to `BORINGCACHE_DEFAULT_WORKSPACE` or repo name. |
 | `cache-tag` | No | repo name | Cache tag prefix used for node/modules tags. |
 | `node-version` | No | auto-detected or `22` | Node.js version to install. |
