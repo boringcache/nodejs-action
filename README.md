@@ -152,7 +152,7 @@ Override or add build cache paths manually:
 
 | Input | Required | Default | Description |
 |-------|----------|---------|-------------|
-| `cli-version` | No | `v1.3.0` | BoringCache CLI version. Set to `skip` to disable installation. |
+| `cli-version` | No | `v1.5.0` | BoringCache CLI version. Set to `skip` to disable installation. |
 | `workspace` | No | repo name | Workspace in `org/repo` form. Defaults to `BORINGCACHE_DEFAULT_WORKSPACE` or repo name. |
 | `cache-tag` | No | repo name | Cache tag prefix used for node/modules tags. |
 | `node-version` | No | auto-detected or `22` | Node.js version to install. |
